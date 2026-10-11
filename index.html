@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Velocímetro Online</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome para iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <style>
+        body {
+            background-color: #121212;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .speedometer-card {
+            background: #1e1e1e;
+            border: 2px solid #333;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .speed-display {
+            font-size: 5rem;
+            font-weight: bold;
+            color: #00ffcc;
+            text-shadow: 0 0 15px rgba(0, 255, 204, 0.4);
+        }
+        .unit-label {
+            font-size: 1.5rem;
+            color: #888;
+        }
+        .metric-box {
+            background: #2a2a2a;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container my-5">
+        <div class="row justify-content-center">
+            <div class="col-md-8 col-lg-6">
+                
+                <div class="text-center mb-4">
+                    <h1 class="fw-bold text-light"><i class="fa-solid fa-gauge-high text-info me-2"></i> Velocímetro Online</h1>
+                    <p class="text-muted">Mide tu velocidad actual usando el GPS de tu dispositivo</p>
+                </div>
+
+                <div class="card speedometer-card p-4 text-center">
+                    <!-- Pantalla principal del Velocímetro -->
+                    <div class="my-3">
+                        <span id="speedValue" class="speed-display">0.0</span>
+                        <div id="unitDisplay" class="unit-label">km/h</div>
+                    </div>
+
+                    <!-- Métricas secundarias -->
+                    <div class="row text-center mt-3">
+                        <div class="col-6">
+                            <div class="metric-box">
+                                <small class="text-muted d-block">VELOCIDAD MÁXIMA</small>
+                                <span id="maxSpeed" class="fs-4 fw-bold text-warning">0.0</span> <small class="text-muted" id="maxUnit">km/h</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="metric-box">
+                                <small class="text-muted d-block">PRECISIÓN GPS</small>
+                                <span id="gpsAccuracy" class="fs-4 fw-bold text-info">-</span> <small class="text-muted">m</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Controles y configuración -->
+                    <div class="mt-4">
+                        <div class="d-grid gap-2 mb-3">
+                            <button id="toggleBtn" class="btn btn-success btn-lg fw-bold py-3 shadow">
+                                <i class="fa-solid fa-play me-2"></i> Iniciar GPS
+                            </button>
+                        </div>
+
+                        <div class="row g-2 align-items-center">
+                            <div class="col-6">
+                                <select id="unitSelect" class="form-select bg-dark text-light border-secondary">
+                                    <option value="kmh">Km/h (Kilómetros)</option>
+                                    <option value="mph">Mph (Millas)</option>
+                                    <option value="ms">m/s (Metros/seg)</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <button id="resetBtn" class="btn btn-outline-danger w-100">
+                                    <i class="fa-solid fa-rotate-right me-1"></i> Reiniciar Máx
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Alertas de estado -->
+                    <div id="statusAlert" class="alert alert-secondary mt-3 mb-0 py-2 small" role="alert">
+                        Estado: Detenido. Haz clic en "Iniciar GPS" para comenzar.
+                    </div>
+                </div>
+
+                <!-- Historial guardado -->
+                <div class="card speedometer-card p-3 mt-4">
+                    <h5 class="text-light mb-3"><i class="fa-solid fa-history me-2 text-warning"></i> Historial Reciente (Guardado)</h5>
+                    <ul id="historyList" class="list-group list-group-flush bg-transparent">
+                        <li class="list-group-item bg-transparent text-muted small">No hay registros guardados aún.</li>
+                    </ul>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        let watchId = null;
+        let maxSpeedValue = 0;
+        let currentUnit = 'kmh';
+        
+        const speedValueEl = document.getElementById('speedValue');
+        const unitDisplayEl = document.getElementById('unitDisplay');
+        const maxSpeedEl = document.getElementById('maxSpeed');
+        const maxUnitEl = document.getElementById('maxUnit');
+        const gpsAccuracyEl = document.getElementById('gpsAccuracy');
+        const toggleBtn = document.getElementById('toggleBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const unitSelect = document.getElementById('unitSelect');
+        const statusAlert = document.getElementById('statusAlert');
+        const historyList = document.getElementById('historyList');
+
+        // Cargar datos guardados previamente del localStorage al iniciar
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedMax = localStorage.getItem('max_speed');
+            const savedUnit = localStorage.getItem('speed_unit');
+            
+            if (savedMax) {
+                maxSpeedValue = parseFloat(savedMax);
+                updateMaxSpeedDisplay();
+            }
+            if (savedUnit) {
+                currentUnit = savedUnit;
+                unitSelect.value = currentUnit;
+                unitDisplayEl.textContent = getUnitLabel();
+                maxUnitEl.textContent = getUnitLabel();
+            }
+            loadHistory();
+        });
+
+        function getUnitLabel() {
+            if (currentUnit === 'mph') return 'mph';
+            if (currentUnit === 'ms') return 'm/s';
+            return 'km/h';
+        }
+
+        function convertSpeed(speedInMetersPerSecond) {
+            if (speedInMetersPerSecond === null || isNaN(speedInMetersPerSecond)) return 0;
+            // Geolocation da velocidad en metros por segundo (m/s)
+            if (currentUnit === 'mph') {
+                return speedInMetersPerSecond * 2.23694; // m/s a mph
+            } else if (currentUnit === 'ms') {
+                return speedInMetersPerSecond;
+            } else {
+                return speedInMetersPerSecond * 3.6; // m/s a km/h
+            }
+        }
+
+        unitSelect.addEventListener('change', (e) => {
+            currentUnit = e.target.value;
+            localStorage.setItem('speed_unit', currentUnit);
+            unitDisplayEl.textContent = getUnitLabel();
+            maxUnitEl.textContent = getUnitLabel();
+            updateMaxSpeedDisplay();
+        });
+
+        toggleBtn.addEventListener('click', () => {
+            if (watchId === null) {
+                startTracking();
+            } else {
+                stopTracking();
+            }
+        });
+
+        resetBtn.addEventListener('click', () => {
+            maxSpeedValue = 0;
+            localStorage.setItem('max_speed', maxSpeedValue);
+            updateMaxSpeedDisplay();
+            statusAlert.className = "alert alert-info mt-3 mb-0 py-2 small";
+            statusAlert.textContent = "Velocidad máxima restablecida.";
+        });
+
+        function startTracking() {
+            if (!navigator.geolocation) {
+                alert("Tu navegador no soporta geolocalización.");
+                return;
+            }
+
+            statusAlert.className = "alert alert-warning mt-3 mb-0 py-2 small";
+            statusAlert.textContent = "Buscando señal de GPS...";
+            
+            toggleBtn.className = "btn btn-danger btn-lg fw-bold py-3 shadow";
+            toggleBtn.innerHTML = '<i class="fa-solid fa-stop me-2"></i> Detener GPS';
+
+            const options = {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+            };
+
+            watchId = navigator.geolocation.watchPosition(successPosition, errorPosition, options);
+        }
+
+        function stopTracking() {
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+
+            toggleBtn.className = "btn btn-success btn-lg fw-bold py-3 shadow";
+            toggleBtn.innerHTML = '<i class="fa-solid fa-play me-2"></i> Iniciar GPS';
+            
+            statusAlert.className = "alert alert-secondary mt-3 mb-0 py-2 small";
+            statusAlert.textContent = "Estado: Detenido.";
+            speedValueEl.textContent = "0.0";
+            gpsAccuracyEl.textContent = "-";
+
+            // Guardar sesión actual en historial
+            if (maxSpeedValue > 0) {
+                saveToHistory(maxSpeedValue, currentUnit);
+            }
+        }
+
+        function successPosition(position) {
+            statusAlert.className = "alert alert-success mt-3 mb-0 py-2 small";
+            statusAlert.textContent = "GPS conectado y recibiendo datos correctamente.";
+
+            // position.coords.speed viene en m/s (metros por segundo)
+            const rawSpeed = position.coords.speed !== null ? position.coords.speed : 0;
+            const converted = convertSpeed(rawSpeed);
+            
+            speedValueEl.textContent = converted.toFixed(1);
+
+            // Actualizar precisión
+            if (position.coords.accuracy) {
+                gpsAccuracyEl.textContent = Math.round(position.coords.accuracy);
+            }
+
+            // Actualizar velocidad máxima
+            if (converted > maxSpeedValue) {
+                maxSpeedValue = converted;
+                localStorage.setItem('max_speed', maxSpeedValue);
+                updateMaxSpeedDisplay();
+            }
+        }
+
+        function errorPosition(error) {
+            statusAlert.className = "alert alert-danger mt-3 mb-0 py-2 small";
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    statusAlert.textContent = "Permiso de GPS denegado por el usuario.";
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    statusAlert.textContent = "Información de ubicación no disponible.";
+                    break;
+                case error.TIMEOUT:
+                    statusAlert.textContent = "Tiempo de espera agotado al buscar GPS.";
+                    break;
+                default:
+                    statusAlert.textContent = "Error desconocido de GPS.";
+                    break;
+            }
+            stopTracking();
+        }
+
+        function updateMaxSpeedDisplay() {
+            maxSpeedEl.textContent = maxSpeedValue.toFixed(1);
+        }
+
+        function saveToHistory(maxSpd, unit) {
+            let history = JSON.parse(localStorage.getItem('speed_history')) || [];
+            const newRecord = {
+                date: new Date().toLocaleString(),
+                maxSpeed: maxSpd.toFixed(1),
+                unit: unit
+            };
+            history.unshift(newRecord); // Agregar al inicio
+            if (history.length > 5) history.pop(); // Mantener solo los últimos 5
+            localStorage.setItem('speed_history', JSON.stringify(history));
+            loadHistory();
+        }
+
+        function loadHistory() {
+            let history = JSON.parse(localStorage.getItem('speed_history')) || [];
+            if (history.length === 0) {
+                historyList.innerHTML = '<li class="list-group-item bg-transparent text-muted small">No hay registros guardados aún.</li>';
+                return;
+            }
+            
+            historyList.innerHTML = '';
+            history.forEach(item => {
+                const li = document.createElement('li');
+                li.className = "list-group-item bg-transparent text-light d-flex justify-content-between align-items-center small px-0";
+                li.innerHTML = `<span><i class="fa-regular fa-clock me-1 text-muted"></i> ${item.date}</span> <span class="badge bg-warning text-dark fs-6">${item.maxSpeed} ${item.unit}</span>`;
+                historyList.appendChild(li);
+            });
+        }
+    </script>
+</body>
+</html>
